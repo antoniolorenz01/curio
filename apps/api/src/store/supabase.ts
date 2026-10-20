@@ -1,6 +1,6 @@
 import type { Feedback, Profile, Session, StimulusAction } from '@curio/contracts';
 import { createClient } from '@supabase/supabase-js';
-import { DEFAULT_PROFILE } from '../engine/actions';
+import { DEFAULT_PROFILE, isStimulusAction } from '../engine/actions';
 import type { ContextRow, Store } from './types';
 
 type Row = Record<string, any>;
@@ -16,7 +16,7 @@ function must<T>(res: Result<T>, what: string): T {
 
 const toProfile = (r: Row): Profile => ({
   interests: r.interests,
-  disabledActions: r.disabled_actions,
+  disabledActions: (r.disabled_actions as string[]).filter(isStimulusAction),
   language: r.language,
   cooldownSec: r.cooldown_sec,
   maxAutoPerSession: r.max_auto_per_session,
@@ -275,7 +275,10 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
         'saveIntervention',
       );
       if (rows.length > 0) return true;
-      const exists = must<Row | null>(await db.from('interventions').select('id').eq('id', id).maybeSingle(), 'saveIntervention');
+      const exists = must<Row | null>(
+        await db.from('interventions').select('id').eq('id', id).maybeSingle(),
+        'saveIntervention',
+      );
       return Boolean(exists);
     },
     async listSaved() {
@@ -288,15 +291,17 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
           .limit(200),
         'listSaved',
       );
-      return rows.map((r) => ({
-        id: r.id,
-        action: r.action as StimulusAction,
-        text: r.text,
-        createdAt: r.created_at,
-        savedAt: r.saved_at,
-        topic: r.contexts?.topic ?? null,
-        url: r.contexts?.url ?? null,
-      }));
+      return rows
+        .filter((r) => isStimulusAction(r.action))
+        .map((r) => ({
+          id: r.id,
+          action: r.action as StimulusAction,
+          text: r.text,
+          createdAt: r.created_at,
+          savedAt: r.saved_at,
+          topic: r.contexts?.topic ?? null,
+          url: r.contexts?.url ?? null,
+        }));
     },
     async createExploration(input) {
       if (!(await this.getSession(input.sessionId))) return false;
@@ -317,7 +322,7 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
         'feedbackHistory',
       );
       return rows.flatMap((r) =>
-        r.interventions
+        r.interventions && isStimulusAction(r.interventions.action)
           ? [{ action: r.interventions.action as StimulusAction, value: r.value as Feedback, createdAt: r.created_at }]
           : [],
       );
@@ -325,9 +330,21 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
     async snapshot() {
       const [sessions, decisions, interventions, feedback, explorations] = await Promise.all([
         db.from('sessions').select('*').order('started_at', { ascending: false }).limit(SNAPSHOT_LIMIT),
-        db.from('decisions').select('session_id, action, latency_ms').order('created_at', { ascending: false }).limit(SNAPSHOT_LIMIT),
-        db.from('interventions').select('id, session_id, action').order('created_at', { ascending: false }).limit(SNAPSHOT_LIMIT),
-        db.from('feedback').select('intervention_id, value').order('created_at', { ascending: false }).limit(SNAPSHOT_LIMIT),
+        db
+          .from('decisions')
+          .select('session_id, action, latency_ms')
+          .order('created_at', { ascending: false })
+          .limit(SNAPSHOT_LIMIT),
+        db
+          .from('interventions')
+          .select('id, session_id, action')
+          .order('created_at', { ascending: false })
+          .limit(SNAPSHOT_LIMIT),
+        db
+          .from('feedback')
+          .select('intervention_id, value')
+          .order('created_at', { ascending: false })
+          .limit(SNAPSHOT_LIMIT),
         db.from('explorations').select('id', { count: 'exact', head: true }),
       ]);
       if (explorations.error) throw new Error(`supabase snapshot: ${explorations.error.message}`);
@@ -338,11 +355,13 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
           action: r.action,
           latencyMs: r.latency_ms,
         })),
-        interventions: must<Row[]>(interventions, 'snapshot').map((r) => ({
-          id: r.id,
-          sessionId: r.session_id,
-          action: r.action,
-        })),
+        interventions: must<Row[]>(interventions, 'snapshot')
+          .filter((r) => isStimulusAction(r.action))
+          .map((r) => ({
+            id: r.id,
+            sessionId: r.session_id,
+            action: r.action,
+          })),
         feedback: must<Row[]>(feedback, 'snapshot').map((r) => ({ interventionId: r.intervention_id, value: r.value })),
         explorations: explorations.count ?? 0,
       };
@@ -350,7 +369,10 @@ export function createSupabaseStore(url: string, serviceRoleKey: string): Store 
   };
 
   async function currentProfile(): Promise<Profile | null> {
-    const row = must<Row | null>(await db.from('profiles').select('*').eq('id', PROFILE_ID).maybeSingle(), 'getProfile');
+    const row = must<Row | null>(
+      await db.from('profiles').select('*').eq('id', PROFILE_ID).maybeSingle(),
+      'getProfile',
+    );
     return row ? toProfile(row) : null;
   }
 }

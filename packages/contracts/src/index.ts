@@ -8,9 +8,7 @@ export const Action = z.enum([
   'real_world_use',
   'personal_connection',
   'analogy',
-  'prediction',
   'surprise',
-  'micro_experiment',
 ]);
 export type Action = z.infer<typeof Action>;
 

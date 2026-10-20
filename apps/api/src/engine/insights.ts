@@ -24,8 +24,9 @@ export function computeInsights(snap: Snapshot, posteriors: Posteriors): Insight
   const perSession = new Map<string, Record<Feedback, number>>();
   for (const f of snap.feedback) {
     const iv = actionOf.get(f.interventionId);
-    if (!iv) continue;
-    feedbackByAction[iv.action]![f.value]++;
+    const counts = iv && feedbackByAction[iv.action];
+    if (!iv || !counts) continue;
+    counts[f.value]++;
     const s = perSession.get(iv.sessionId) ?? emptyCounts();
     s[f.value]++;
     perSession.set(iv.sessionId, s);

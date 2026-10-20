@@ -6,9 +6,7 @@ export const actionLabels: Record<Action, string> = {
   real_world_use: 'Real-world use',
   personal_connection: 'Personal connection',
   analogy: 'Analogy',
-  prediction: 'Prediction',
   surprise: 'Surprise',
-  micro_experiment: 'Mini experiment',
 };
 
 export const stimulusActions: StimulusAction[] = [
@@ -16,9 +14,7 @@ export const stimulusActions: StimulusAction[] = [
   'real_world_use',
   'personal_connection',
   'analogy',
-  'prediction',
   'surprise',
-  'micro_experiment',
 ];
 
 export const feedbackLabels: Record<Feedback, string> = {

@@ -31,8 +31,10 @@ export function computePosteriors(events: FeedbackEvent[], now = Date.now(), hal
     const ageDays = Math.max(0, (now - Date.parse(e.createdAt)) / 86_400_000);
     const w = Math.pow(0.5, ageDays / halfLifeDays);
     const u = UPDATES[e.value];
-    out[e.action].alpha += u.alpha * w;
-    out[e.action].beta += u.beta * w;
+    const p = out[e.action];
+    if (!p) continue; // retired idea type
+    p.alpha += u.alpha * w;
+    p.beta += u.beta * w;
   }
   return out;
 }
