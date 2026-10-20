@@ -1,0 +1,27 @@
+{
+  "name": "curio",
+  "private": true,
+  "description": "A browser extension that sparks curiosity while you read, without getting in the way.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/antoniolorenz01/curio.git"
+  },
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n api,ext -c blue,magenta \"npm run dev -w @curio/api\" \"npm run dev -w @curio/extension\"",
+    "dev:api": "npm run dev -w @curio/api",
+    "dev:ext": "npm run dev -w @curio/extension",
+    "build:ext": "npm run build -w @curio/extension",
+    "test": "npm run test -w @curio/api",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "typescript": "^5.9.0"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "@curio/extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare",
+    "typecheck": "tsc -p .",
+    "icons": "node scripts/icons.mjs"
+  },
+  "dependencies": {
+    "@curio/contracts": "*",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@wxt-dev/module-react": "^1.1.0",
+    "tailwindcss": "^4.3.3",
+    "wxt": "^0.20.0"
+  }
+}
