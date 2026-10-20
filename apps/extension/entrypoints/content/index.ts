@@ -9,6 +9,7 @@ import {
 import { isFeedUrl, isSensitiveUrl } from '@/lib/sensitive';
 import { autoOn, defaultSettings, devModeItem, settingsItem, type Settings } from '@/lib/storage';
 import { collectPage, MIN_SELECTION_CHARS, selectedText, selectionSnapshot } from './extract';
+import { setYoutubeDebug } from '@/lib/youtube';
 import { createUi } from './ui';
 
 const AUTO_SELECTION_CHARS = 200;
@@ -68,8 +69,12 @@ export default defineContentScript({
       switch (message.type) {
         case 'curio:collect':
           // Never replace a card the user hasn't answered with an automatic one.
-          sendResponse(!message.manual && ui.hasCard() ? { ok: false, reason: 'busy' } : collectPage());
-          return;
+          if (!message.manual && ui.hasCard()) {
+            sendResponse({ ok: false, reason: 'busy' });
+            return;
+          }
+          void collectPage().then(sendResponse);
+          return true; // async reply
         case 'curio:loading':
           ui.showLoading();
           return;
@@ -89,8 +94,12 @@ export default defineContentScript({
     const unwatch = settingsItem.watch((v) => (settings = { ...defaultSettings, ...v }));
     ctx.onInvalidated(quietly(unwatch));
     let dwellNeeded = DWELL_MS;
-    void devModeItem.getValue().then((dev) => (dwellNeeded = dev ? DEV_DWELL_MS : DWELL_MS));
-    ctx.onInvalidated(quietly(devModeItem.watch((dev) => (dwellNeeded = dev ? DEV_DWELL_MS : DWELL_MS))));
+    const applyDevMode = (dev: boolean) => {
+      dwellNeeded = dev ? DEV_DWELL_MS : DWELL_MS;
+      setYoutubeDebug(dev);
+    };
+    void devModeItem.getValue().then(applyDevMode);
+    ctx.onInvalidated(quietly(devModeItem.watch(applyDevMode)));
 
 
     const onSelectionDone = () => {
@@ -139,17 +148,20 @@ export default defineContentScript({
 
       const url = location.href;
       if (asking || dwellMs < dwellNeeded || now < retryAt || reported === url || !autoOn(settings) || isFeedUrl(url)) return;
-      const page = collectPage();
-      if (!page.ok || page.page.text.length < MIN_READING_CHARS) {
-        reported = url;
-        return;
+      asking = true; // reading a video's captions can take a few seconds; don't start twice
+      try {
+        const page = await collectPage();
+        if (!page.ok || page.page.text.length < MIN_READING_CHARS) {
+          reported = url;
+          return;
+        }
+        const result = await sendToBackground<VisitResult>({ type: 'curio:visit', url });
+        // During a cooldown, ask again when it ends (only if still on this page and reading).
+        if (result && !result.done) retryAt = Date.now() + result.retryInSec * 1000;
+        else reported = url;
+      } finally {
+        asking = false;
       }
-      asking = true;
-      const result = await sendToBackground<VisitResult>({ type: 'curio:visit', url });
-      asking = false;
-      // During a cooldown, ask again when it ends (only if still on this page and reading).
-      if (result && !result.done) retryAt = Date.now() + result.retryInSec * 1000;
-      else reported = url;
     }, DWELL_TICK_MS);
   },
 });

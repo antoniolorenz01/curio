@@ -1,5 +1,6 @@
 import type { CollectResult, PageSnapshot } from '@/lib/messages';
 import { isSensitiveUrl, MAX_TEXT_CHARS } from '@/lib/sensitive';
+import { youtubeText, youtubeVideoId } from '@/lib/youtube';
 
 export const MIN_SELECTION_CHARS = 40;
 const MIN_PAGE_CHARS = 200;
@@ -25,12 +26,19 @@ export function selectionSnapshot(text: string): PageSnapshot {
   return { sourceType: 'selection', text, url: location.href, title: document.title };
 }
 
-/** The selection if there is one, otherwise the main text of the page. */
-export function collectPage(): CollectResult {
+/** The selection if there is one; on a YouTube video, what is being said now; otherwise the page's main text. */
+export async function collectPage(): Promise<CollectResult> {
   if (isSensitiveUrl(location.href)) return { ok: false, reason: "This page isn't read (private or a browser page)." };
 
   const selection = selectedText();
   if (selection.length >= MIN_SELECTION_CHARS) return { ok: true, page: selectionSnapshot(selection) };
+
+  const videoId = youtubeVideoId();
+  if (videoId) {
+    const { text } = await youtubeText(videoId);
+    if (text.length < MIN_SELECTION_CHARS) return { ok: false, reason: 'Not enough to go on for this video yet.' };
+    return { ok: true, page: { sourceType: 'video', text: clean(text), url: location.href, title: document.title } };
+  }
 
   const root =
     document.querySelector<HTMLElement>('article') ??
