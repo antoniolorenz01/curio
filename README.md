@@ -10,6 +10,7 @@ It is not a chatbot and not a notification machine. Silence is a valid outcome: 
 
 - **Ask for an idea:** select text and click the **Curio** button next to it, press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, or use the side panel. The idea appears in a small card in the corner of the page.
 - **Go deeper:** from the card, choose **Tell me more** or **Ask** a question about it.
+- **Videos and PDFs:** on YouTube, ideas are about what is being said around the current moment (from the captions). PDFs open in your usual viewer; Curio reads the file itself and each idea draws on a different part of it (its chapters, or sections of a few pages). PDF ideas appear in the side panel. For local files, enable **Allow access to file URLs** for Curio in the extensions page.
 - **Automatic suggestions (opt-in):** when you stay on a page for about 45 seconds or select a long passage, Curio decides whether an idea is worth offering. At most one every few minutes, once per page, and never on mail, chats, social feeds, account or banking pages.
 - **Learning:** each answer (*Helpful*, *Not interested*, *Distracting*) updates a Thompson Sampling bandit per idea type. Ignoring a card is not counted as failure.
 - **Insights:** the side panel shows what it learned, how often it stayed silent, latency, and a comparison of sessions with and without suggestions.

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@curio/contracts": "*",
+    "pdfjs-dist": "^6.4.299",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^4.0.0"

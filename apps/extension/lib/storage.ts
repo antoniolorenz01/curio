@@ -1,4 +1,5 @@
 import { storage } from '#imports';
+import type { PanelCardState } from './messages';
 
 export type Settings = {
   apiUrl: string;
@@ -36,6 +37,9 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
 
 /** Mirrors the API's CURIO_DEV flag: shorter timers and no per-page dedupe while developing. */
 export const devModeItem = storage.defineItem<boolean>('local:devMode', { fallback: false });
+
+/** Idea for a tab where no card can be drawn (PDF viewers); the side panel shows it. */
+export const panelCardItem = storage.defineItem<PanelCardState | null>('session:panelCard', { fallback: null });
 
 export const sessionItem = storage.defineItem<ActiveSession | null>('local:session', {
   fallback: null,

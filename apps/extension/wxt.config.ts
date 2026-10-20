@@ -7,7 +7,7 @@ export default defineConfig({
   manifest: {
     name: 'Curio',
     description: 'Sparks curiosity while you read, without getting in the way.',
-    permissions: ['sidePanel', 'storage', 'activeTab', 'scripting', 'alarms'],
+    permissions: ['sidePanel', 'storage', 'activeTab', 'scripting', 'alarms', 'offscreen'],
     // Needed to show the card on any page and read it on demand.
     host_permissions: ['<all_urls>'],
     action: { default_title: 'Open Curio' },

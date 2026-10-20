@@ -2,10 +2,11 @@ import { browser, storage } from '#imports';
 import type { StimulusAction, Trigger } from '@curio/contracts';
 import { api, errorMessage } from './api';
 import { noneNote } from './labels';
-import type { CollectResult, PageMessage, PageSnapshot, Result, VisitResult } from './messages';
+import type { CollectResult, PageMessage, PageSnapshot, PanelCardState, Result, VisitResult } from './messages';
+import { isPdfResource, isPdfUrl, pdfSnapshot } from './pdf';
 import { isFeedUrl, isSensitiveUrl } from './sensitive';
 import { ensureSession } from './session';
-import { autoOn, defaultSettings, devModeItem, settingsItem, type Settings } from './storage';
+import { autoOn, defaultSettings, devModeItem, panelCardItem, settingsItem, type Settings } from './storage';
 
 // Runs in the background service worker: the suggestion flow lives here so it works
 // on any page without the side panel open.
@@ -22,7 +23,27 @@ export async function getSettings(): Promise<Settings> {
   return { ...defaultSettings, ...(await settingsItem.getValue()) };
 }
 
-const send = (tabId: number, message: PageMessage) => browser.tabs.sendMessage(tabId, message).catch(() => {});
+/**
+ * Shows a message in the page. Where no card can be drawn (PDF viewers, browser pages), the side
+ * panel shows it instead and the toolbar icon gets a badge.
+ */
+async function send(tabId: number, message: PageMessage) {
+  try {
+    await browser.tabs.sendMessage(tabId, message);
+  } catch {
+    const state: PanelCardState | null =
+      message.type === 'curio:loading'
+        ? { kind: 'loading' }
+        : message.type === 'curio:card'
+          ? { kind: 'card', card: message.card }
+          : message.type === 'curio:note'
+            ? { kind: 'note', text: message.text, tone: message.tone }
+            : null;
+    if (!state) return;
+    await panelCardItem.setValue(state);
+    if (state.kind === 'card') await browser.action.setBadgeText({ text: '1', tabId }).catch(() => {});
+  }
+}
 
 /** context → decision → card in the page. Automatic triggers fail silently. */
 export async function suggest(tabId: number, trigger: Trigger, page: PageSnapshot, requestedAction?: StimulusAction) {
@@ -84,6 +105,15 @@ async function collect(tabId: number, manual: boolean): Promise<CollectResult> {
   }
 }
 
+/** The page's text, or for PDFs (in any viewer) a part of the document read by Curio itself. */
+async function readTab(tabId: number, url: string | undefined, title: string | undefined, manual: boolean) {
+  if (url && isPdfUrl(url)) return pdfSnapshot(url, title);
+  const read = await collect(tabId, manual);
+  if (read.ok || read.reason === 'busy' || !url || !/^(https?|file):/.test(url)) return read;
+  // PDFs served without a .pdf name show up as pages Curio can't read.
+  return (await isPdfResource(url)) ? pdfSnapshot(url, title) : read;
+}
+
 async function activeTab() {
   const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
   return tab?.id ? tab : null;
@@ -94,7 +124,7 @@ export async function suggestOnActiveTab(requestedAction?: StimulusAction): Prom
   const tab = await activeTab();
   if (!tab?.id) return { ok: false, reason: 'No active tab.' };
   if (isSensitiveUrl(tab.url)) return { ok: false, reason: "This page isn't read (private or a browser page)." };
-  const read = await collect(tab.id, true);
+  const read = await readTab(tab.id, tab.url, tab.title, true);
   if (!read.ok) return read;
   void suggest(tab.id, 'manual', read.page, requestedAction);
   return { ok: true };
@@ -118,7 +148,8 @@ export async function visit(tabId: number, url: string): Promise<VisitResult> {
   }
 
   await visitedItem.setValue([...(await visitedItem.getValue()).slice(-299), key]);
-  const read = await collect(tabId, false);
+  const tab = await browser.tabs.get(tabId).catch(() => null);
+  const read = await readTab(tabId, url, tab?.title, false);
   if (read.ok) await suggest(tabId, 'checkpoint', read.page);
   return { done: true };
 }
@@ -128,8 +159,31 @@ export async function checkpoint() {
   if (!autoOn(await getSettings())) return;
   const tab = await activeTab();
   if (!tab?.id || isSensitiveUrl(tab.url)) return;
-  const read = await collect(tab.id, false);
+  const read = await readTab(tab.id, tab.url, tab.title, false);
   if (read.ok) await suggest(tab.id, 'checkpoint', read.page);
+}
+
+// PDF viewers run no content script, so the background measures "reading for a while" itself:
+// when a PDF tab becomes active, an alarm fires after the dwell time if it's still in front.
+export const PDF_VISIT_ALARM = 'curio:pdf-visit';
+const pendingPdfVisit = storage.defineItem<{ tabId: number; url: string } | null>('session:pdfVisit', { fallback: null });
+
+export async function schedulePdfVisit(tabId: number, url: string | undefined) {
+  if (!url || !isPdfUrl(url) || !autoOn(await getSettings())) {
+    await browser.alarms.clear(PDF_VISIT_ALARM);
+    return;
+  }
+  const seconds = (await devModeItem.getValue()) ? 5 : 45;
+  await pendingPdfVisit.setValue({ tabId, url });
+  await browser.alarms.create(PDF_VISIT_ALARM, { when: Date.now() + seconds * 1000 });
+}
+
+export async function runPdfVisit() {
+  const pending = await pendingPdfVisit.getValue();
+  const tab = await activeTab();
+  if (!pending || tab?.id !== pending.tabId || tab.url !== pending.url) return;
+  const result = await visit(pending.tabId, pending.url);
+  if (!result.done) await browser.alarms.create(PDF_VISIT_ALARM, { when: Date.now() + result.retryInSec * 1000 });
 }
 
 export const CHECKPOINT_ALARM = 'curio:checkpoint';

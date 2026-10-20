@@ -7,12 +7,14 @@ import type { PanelMessage, Result } from '@/lib/messages';
 import { endSession, ensureSession } from '@/lib/session';
 import { autoOn, updateSettings, type ActiveSession, type Settings } from '@/lib/storage';
 import { useSession } from '../hooks';
+import { PanelCard } from './PanelCard';
 
 export function Study({ settings }: { settings: Settings }) {
   const session = useSession();
 
   return (
     <div className="space-y-5">
+      <PanelCard />
       <Ask />
       <div className="space-y-3">
         <AutoSuggest settings={settings} />
@@ -48,7 +50,7 @@ function Ask() {
     <Card className="space-y-2.5">
       <p className="text-xs text-muted">
         Select text on the page and tap <b>Curio</b>, or press <kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>. The
-        idea shows up in a corner of the page.
+        idea shows up in a corner of the page, or here for PDFs.
       </p>
       <Button variant="primary" className="w-full" disabled={busy} onClick={() => void ask()}>
         {action ? `Suggest: ${actionLabels[action]}` : 'Suggest something about this page'}

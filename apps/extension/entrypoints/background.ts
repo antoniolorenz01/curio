@@ -2,7 +2,10 @@ import { api, errorMessage } from '@/lib/api';
 import {
   CHECKPOINT_ALARM,
   checkpoint,
+  PDF_VISIT_ALARM,
   refreshDevMode,
+  runPdfVisit,
+  schedulePdfVisit,
   suggest,
   suggestOnActiveTab,
   syncCheckpointAlarm,
@@ -16,6 +19,7 @@ import {
   type Result,
   type VisitResult,
 } from '@/lib/messages';
+import { isPdfUrl } from '@/lib/pdf';
 import { touchSession } from '@/lib/session';
 import { devModeItem, settingsItem } from '@/lib/storage';
 
@@ -26,13 +30,25 @@ export default defineBackground(() => {
   settingsItem.watch(() => void syncCheckpointAlarm());
   devModeItem.watch(() => void syncCheckpointAlarm());
   browser.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name === PDF_VISIT_ALARM) void runPdfVisit();
     if (alarm.name !== CHECKPOINT_ALARM) return;
     void refreshDevMode();
     void checkpoint();
   });
 
-  browser.commands.onCommand.addListener((command) => {
-    if (command === 'suggest') void suggestOnActiveTab();
+  // Reading time for PDFs, which run no content script.
+  browser.tabs.onActivated.addListener(({ tabId }) => {
+    void browser.tabs.get(tabId).then((tab) => schedulePdfVisit(tabId, tab.url), () => {});
+  });
+  browser.tabs.onUpdated.addListener((tabId, change, tab) => {
+    if (tab.active && (change.url || change.status === 'complete')) void schedulePdfVisit(tabId, tab.url);
+  });
+
+  browser.commands.onCommand.addListener((command, tab) => {
+    if (command !== 'suggest') return;
+    // In a PDF the idea shows in the side panel; opening it must happen right away, within the key press.
+    if (tab?.id && isPdfUrl(tab.url)) browser.sidePanel.open({ tabId: tab.id }).catch(() => {});
+    void suggestOnActiveTab();
   });
 
   // sendResponse + `return true` keeps the channel open for async replies in every Chromium.

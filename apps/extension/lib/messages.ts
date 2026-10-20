@@ -30,6 +30,12 @@ export type ContentMessage =
 /** Side panel → background. */
 export type PanelMessage = { type: 'curio:request-active'; requestedAction?: StimulusAction };
 
+/** What the side panel shows when the page itself can't (e.g. a PDF viewer). */
+export type PanelCardState =
+  | { kind: 'loading' }
+  | { kind: 'card'; card: CardData }
+  | { kind: 'note'; text: string; tone: 'muted' | 'error' };
+
 /** Background → content script. `collect` replies with a CollectResult. */
 export type PageMessage =
   | { type: 'curio:collect'; manual: boolean }
