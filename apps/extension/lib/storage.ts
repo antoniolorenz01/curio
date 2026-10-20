@@ -34,6 +34,9 @@ export const settingsItem = storage.defineItem<Settings>('local:settings', {
   fallback: defaultSettings,
 });
 
+/** Mirrors the API's CURIO_DEV flag: shorter timers and no per-page dedupe while developing. */
+export const devModeItem = storage.defineItem<boolean>('local:devMode', { fallback: false });
+
 export const sessionItem = storage.defineItem<ActiveSession | null>('local:session', {
   fallback: null,
 });

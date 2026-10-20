@@ -18,7 +18,8 @@ import {
 import { z } from 'zod';
 import { defaultSettings, settingsItem } from './storage';
 
-const TIMEOUT_MS = 15_000;
+// Above the API's own limits: writing an idea may take up to 30 s and retry once.
+const TIMEOUT_MS = 75_000;
 const Ok = z.object({ ok: z.literal(true) });
 
 export class ApiError extends Error {
@@ -62,7 +63,10 @@ async function request<T>(schema: z.ZodType<T>, method: string, path: string, bo
   return parsed.data;
 }
 
+const Health = z.object({ ok: z.boolean(), dev: z.boolean().optional() });
+
 export const api = {
+  health: () => request(Health, 'GET', '/health'),
   getProfile: () => request(Profile, 'GET', '/profile'),
   updateProfile: (input: UpdateProfileInput) => request(Profile, 'PUT', '/profile', input),
   createSession: (input: CreateSessionInput) => request(Session, 'POST', '/sessions', input),

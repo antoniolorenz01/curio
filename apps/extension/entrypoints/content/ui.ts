@@ -4,7 +4,8 @@ import type { CardData } from '@/lib/messages';
 import { styles } from './styles';
 
 type Handlers = {
-  onBubble: () => void;
+  /** Receives the text that was selected when the button appeared. */
+  onBubble: (text: string) => void;
   onFeedback: (interventionId: string, value: Feedback) => Promise<boolean>;
   onSave: (interventionId: string) => Promise<boolean>;
   /** Resolves with the answer text, or null if it failed. */
@@ -53,6 +54,7 @@ export function createUi(handlers: Handlers) {
   root.append(el('style', undefined, styles));
 
   let bubble: HTMLButtonElement | null = null;
+  let bubbleText = '';
   let panel: HTMLElement | null = null;
   let card: CardData | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -94,13 +96,16 @@ export function createUi(handlers: Handlers) {
     hasCard: () => card !== null,
     dismiss,
 
-    showBubble(rect: DOMRect) {
+    showBubble(rect: DOMRect, text: string) {
+      bubbleText = text;
       bubble ??= (() => {
         const b = el('button', 'bubble');
         b.type = 'button';
+        // Clicking would otherwise clear the page selection before we can use it.
+        b.addEventListener('mousedown', (e) => e.preventDefault());
         b.append(mark(), 'Curio');
         b.title = 'Suggest something about this';
-        b.addEventListener('click', () => handlers.onBubble());
+        b.addEventListener('click', () => handlers.onBubble(bubbleText));
         root.append(b);
         return b;
       })();

@@ -5,12 +5,18 @@ import { noneNote } from './labels';
 import type { CollectResult, PageMessage, PageSnapshot, Result, VisitResult } from './messages';
 import { isFeedUrl, isSensitiveUrl } from './sensitive';
 import { ensureSession } from './session';
-import { autoOn, defaultSettings, settingsItem, type Settings } from './storage';
+import { autoOn, defaultSettings, devModeItem, settingsItem, type Settings } from './storage';
 
 // Runs in the background service worker: the suggestion flow lives here so it works
 // on any page without the side panel open.
 
 const inFlight = new Set<number>();
+
+/** Asks the API whether it runs in development mode and stores the answer for every part of the extension. */
+export async function refreshDevMode() {
+  const dev = await api.health().then((h) => h.dev === true, () => null);
+  if (dev !== null && dev !== (await devModeItem.getValue())) await devModeItem.setValue(dev);
+}
 
 export async function getSettings(): Promise<Settings> {
   return { ...defaultSettings, ...(await settingsItem.getValue()) };
@@ -22,7 +28,12 @@ const send = (tabId: number, message: PageMessage) => browser.tabs.sendMessage(t
 export async function suggest(tabId: number, trigger: Trigger, page: PageSnapshot, requestedAction?: StimulusAction) {
   const manual = trigger === 'manual';
   const settings = await getSettings();
-  if (inFlight.has(tabId) || (!manual && !autoOn(settings))) return;
+  if (!manual && !autoOn(settings)) return;
+  if (inFlight.has(tabId)) {
+    // An automatic suggestion is being written for this tab; say so instead of doing nothing.
+    if (manual) await send(tabId, { type: 'curio:note', text: 'Still working on an idea for this page…', tone: 'muted' });
+    return;
+  }
 
   inFlight.add(tabId);
   if (manual) await send(tabId, { type: 'curio:loading' });
@@ -98,7 +109,8 @@ const visitedItem = storage.defineItem<string[]>('session:visited', { fallback: 
 export async function visit(tabId: number, url: string): Promise<VisitResult> {
   if (!autoOn(await getSettings()) || isSensitiveUrl(url) || isFeedUrl(url)) return { done: true };
   const key = url.split('#')[0]!;
-  if ((await visitedItem.getValue()).includes(key)) return { done: true };
+  const dev = await devModeItem.getValue();
+  if (!dev && (await visitedItem.getValue()).includes(key)) return { done: true };
 
   const status = await api.autoStatus(await ensureSession(true));
   if (!status.allowed) {
@@ -126,7 +138,7 @@ export async function syncCheckpointAlarm() {
   const settings = await getSettings();
   if (autoOn(settings)) {
     const existing = await browser.alarms.get(CHECKPOINT_ALARM);
-    const period = Math.max(1, settings.checkpointMin);
+    const period = (await devModeItem.getValue()) ? 1 : Math.max(1, settings.checkpointMin);
     if (existing?.periodInMinutes !== period) {
       await browser.alarms.create(CHECKPOINT_ALARM, { periodInMinutes: period });
     }

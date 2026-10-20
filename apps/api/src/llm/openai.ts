@@ -16,7 +16,7 @@ export async function createOpenAiLlm(opts: Options): Promise<Llm> {
 
   return {
     async json<T>(req: JsonRequest<T>) {
-      const effort = req.tier === 'fast' ? opts.fastReasoningEffort : opts.reasoningEffort;
+      const effort = req.reasoningEffort ?? (req.tier === 'fast' ? opts.fastReasoningEffort : opts.reasoningEffort);
       const completion = await client.chat.completions.create(
         {
           model: req.tier === 'fast' ? opts.fastModel : opts.model,

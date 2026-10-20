@@ -12,6 +12,8 @@ export type RuleInput = {
   timeSinceLastSuggestionSec: number;
   autoInterventions: number;
   profile: Profile;
+  /** Development mode: automatic triggers skip the cooldown, the per-session cap and the control arm. */
+  dev?: boolean;
 };
 
 export type RuleResult = { blocked: true; reason: string } | { blocked: false };
@@ -30,6 +32,7 @@ export function applyRules(input: RuleInput): RuleResult {
   if (input.paused) return block('paused');
   if (input.mode === 'silence') return block('silence_mode');
   if (input.mode === 'manual') return block('manual_mode');
+  if (input.dev) return { blocked: false };
   if (input.arm === 'control') return block('control_arm');
   if (input.timeSinceLastSuggestionSec < input.profile.cooldownSec) return block('cooldown');
   if (input.autoInterventions >= input.profile.maxAutoPerSession) return block('session_cap');

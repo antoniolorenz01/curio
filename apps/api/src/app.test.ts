@@ -38,7 +38,7 @@ function fakeLlm(overrides: Partial<Record<string, () => unknown>> = {}): Llm & 
 }
 
 /** `apiToken: null` runs the API in local, token-less mode. */
-function setup(llm = fakeLlm(), apiToken: string | null = TOKEN) {
+function setup(llm = fakeLlm(), apiToken: string | null = TOKEN, dev = false) {
   const store = createMemoryStore();
   const app = createApp({
     store,
@@ -46,6 +46,7 @@ function setup(llm = fakeLlm(), apiToken: string | null = TOKEN) {
     assessor: createAssessorChain([{ assessor: createLlmAssessor(llm), minConfidence: 0 }]),
     apiToken: apiToken ?? undefined,
     rng: mulberry32(42),
+    dev,
   });
   const call = async (method: string, path: string, body?: unknown, token = TOKEN) => {
     const res = await app.request(path, {
@@ -165,6 +166,21 @@ describe('api', () => {
     const { session, contextId } = await startWithContext(t, 'manual');
     const res = (await t.call('POST', '/decisions', { sessionId: session.id, contextId, trigger: 'manual', mode: 'manual', paused: false })).body;
     expect((await t.call('POST', `/interventions/${res.intervention.id}/more`, {})).status).toBe(502);
+  });
+
+  it('in dev mode, automatic triggers skip the cooldown and the assessor saying no', async () => {
+    t = setup(fakeLlm({ assess: () => ({ intervene_probability: 0.1, distraction_risk: 0.8, fitting_actions: ['analogy'], confidence: 0.9 }) }), TOKEN, true);
+    expect((await t.app.request('/health')).status).toBe(200);
+    expect(await (await t.app.request('/health')).json()).toEqual({ ok: true, dev: true });
+
+    const { session, contextId } = await startWithContext(t);
+    const req = { sessionId: session.id, contextId, trigger: 'selection', mode: 'occasional', paused: false };
+    const first = (await t.call('POST', '/decisions', req)).body;
+    expect(first.decision.reasonCode).toBe('dev:forced');
+    expect(first.intervention).not.toBeNull();
+    const second = (await t.call('POST', '/decisions', req)).body;
+    expect(second.intervention).not.toBeNull();
+    expect((await t.call('GET', `/sessions/${session.id}/auto-status`)).body.allowed).toBe(true);
   });
 
   it('applies cooldown to automatic triggers and logs the none decision', async () => {

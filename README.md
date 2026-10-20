@@ -62,11 +62,12 @@ All settings live in `.env` (see [`.env.example`](.env.example)).
 |---|---|---|
 | `OPENAI_API_KEY` | required | Writes and evaluates ideas |
 | `OPENAI_MODEL` / `OPENAI_MODEL_FAST` | `gpt-5.4-mini` / `gpt-5.4-nano` | Writing model / condensing and assessing model |
-| `OPENAI_REASONING_EFFORT` / `_FAST` | `low` / `none` | Reasoning effort per model tier |
+| `OPENAI_REASONING_EFFORT` / `_FAST` | `medium` / `none` | Reasoning effort per model tier; `medium` writes noticeably better ideas, `low` is faster |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | empty | Persistence; in-memory when empty |
 | `TYPESAFE_API_KEY` | empty | Enables [Jev](https://docs.typesafe.ai) as the assessor; `JEV_ENABLED=false` turns it off |
 | `LANGSMITH_API_KEY` | empty | Enables LangSmith tracing; `LANGSMITH_TRACING=false` turns it off |
 | `HOST`, `PORT` | `127.0.0.1`, `8787` | Where the API listens |
+| `CURIO_DEV` | `false` | Development mode: automatic suggestions skip cooldowns and silence, and appear after ~5 s on a page |
 | `API_TOKEN` | empty | Required when `HOST` isn't local |
 
 Jev, LangSmith and Supabase are optional and independent. Removing a key falls back cleanly: no Jev → small LLM assessor; no LangSmith → no tracing; no Supabase → memory. On startup the API prints what's active, e.g. `store=supabase assessor=jev>llm>conservative langsmith=off`.

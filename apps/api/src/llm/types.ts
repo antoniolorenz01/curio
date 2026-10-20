@@ -10,6 +10,8 @@ export type JsonRequest<T> = {
   user: string;
   schema: z.ZodType<T>;
   timeoutMs: number;
+  /** Overrides the tier's configured reasoning effort for this request. */
+  reasoningEffort?: string;
 };
 
 export interface Llm {

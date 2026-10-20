@@ -1,3 +1,5 @@
+import type { StimulusAction } from '@curio/contracts';
+
 export type Verdict = { ok: true } | { ok: false; reason: string };
 
 const MIN_CHARS = 20;
@@ -37,9 +39,10 @@ export function verifyShape(text: string, maxChars: number): Verdict {
  * Rule-based verifier: shape, safety and relevance. The anchor is the key term the
  * generator says it wrote about; it must appear in the topic or the material.
  */
-export function verifyIntervention(text: string, anchor: string, material: string): Verdict {
+export function verifyIntervention(text: string, anchor: string, material: string, action?: StimulusAction): Verdict {
   const shape = verifyShape(text, MAX_CHARS);
   if (!shape.ok) return shape;
+  if (action === 'question' && !text.includes('?')) return { ok: false, reason: 'question_without_question' };
 
   const normAnchor = normalizeForMatch(anchor);
   if (normAnchor.length < 3) return { ok: false, reason: 'missing_anchor' };

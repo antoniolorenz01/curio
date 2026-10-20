@@ -105,6 +105,12 @@ describe('verifier', () => {
     expect(verifyIntervention('What else around you has a rate of change you could measure today?', 'RATE OF CHANGE', material)).toEqual({ ok: true });
   });
 
+  it('requires an actual question for the question type', () => {
+    const text = 'Two consuls ruled at once so that either could block the other.';
+    expect(verifyIntervention(text, 'rate of change', material, 'question')).toEqual({ ok: false, reason: 'question_without_question' });
+    expect(verifyIntervention(`${text} Why would a city want that?`, 'rate of change', material, 'question')).toEqual({ ok: true });
+  });
+
   it('ignores accents when matching the anchor', () => {
     expect(verifyIntervention('Why did cafés become places to argue about ideas?', 'Cafe culture', 'Café culture in Vienna shaped modern thought.')).toEqual({ ok: true });
   });

@@ -24,8 +24,11 @@ const EnvSchema = z.object({
   OPENAI_MODEL: z.string().default('gpt-5.4-mini'),
   OPENAI_MODEL_FAST: z.string().default('gpt-5.4-nano'),
   // Per tier. An empty value sends nothing and uses the model default.
-  OPENAI_REASONING_EFFORT: z.string().default('low'),
+  OPENAI_REASONING_EFFORT: z.string().default('medium'),
   OPENAI_REASONING_EFFORT_FAST: z.string().default('none'),
+
+  // Development mode: automatic suggestions show up fast and whenever possible. Never in production.
+  CURIO_DEV: flag(false),
 
   // Jev is on when a key is present, unless JEV_ENABLED=false.
   TYPESAFE_API_KEY: optional,

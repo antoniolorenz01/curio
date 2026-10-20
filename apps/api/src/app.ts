@@ -37,7 +37,8 @@ export function createApp(deps: AppDeps) {
   });
   app.notFound((c) => c.json({ error: 'not_found' }, 404));
 
-  app.get('/health', (c) => c.json({ ok: true }));
+  // `dev` lets the extension shorten its own timers while developing.
+  app.get('/health', (c) => c.json({ ok: true, dev: deps.dev === true }));
 
   const api = new Hono();
   api.use('*', extensionOriginOnly());

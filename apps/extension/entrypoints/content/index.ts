@@ -7,7 +7,7 @@ import {
   type VisitResult,
 } from '@/lib/messages';
 import { isFeedUrl, isSensitiveUrl } from '@/lib/sensitive';
-import { autoOn, defaultSettings, settingsItem, type Settings } from '@/lib/storage';
+import { autoOn, defaultSettings, devModeItem, settingsItem, type Settings } from '@/lib/storage';
 import { collectPage, MIN_SELECTION_CHARS, selectedText, selectionSnapshot } from './extract';
 import { createUi } from './ui';
 
@@ -15,8 +15,22 @@ const AUTO_SELECTION_CHARS = 200;
 const AUTO_DEBOUNCE_MS = 800;
 /** Time actually spent on a page (tab visible and focused) before it counts as reading. */
 const DWELL_MS = 45_000;
-const DWELL_TICK_MS = 5_000;
+const DEV_DWELL_MS = 5_000;
+const DWELL_TICK_MS = 1_000;
 const MIN_READING_CHARS = 600;
+
+/**
+ * When the extension reloads (e.g. in development), scripts already running in open tabs lose
+ * access to extension APIs, so unsubscribing from storage throws "Extension context invalidated".
+ * There is nothing left to clean up at that point, so the error is safe to ignore.
+ */
+const quietly = (fn: () => void) => () => {
+  try {
+    fn();
+  } catch {
+    // context already gone
+  }
+};
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -24,11 +38,17 @@ export default defineContentScript({
     const sendToBackground = <T = Result>(message: ContentMessage) =>
       (browser.runtime.sendMessage(message) as Promise<T | undefined>).catch(() => undefined);
 
+    // Automatic trigger for long selections, cancelled when the user clicks the button instead.
+    let autoTimer: ReturnType<typeof setTimeout> | undefined;
+    let lastAuto = '';
+
     const ui = createUi({
-      onBubble: () => {
-        const text = selectedText();
+      onBubble: (text) => {
         ui.hideBubble();
         if (text.length < MIN_SELECTION_CHARS) return;
+        // The user asked: drop the automatic suggestion this same selection would have triggered.
+        clearTimeout(autoTimer);
+        lastAuto = text;
         if (ui.hasCard()) ui.dismiss();
         void sendToBackground({ type: 'curio:request', page: selectionSnapshot(text) });
       },
@@ -67,15 +87,16 @@ export default defineContentScript({
     let settings: Settings = defaultSettings;
     void settingsItem.getValue().then((v) => (settings = { ...defaultSettings, ...v }));
     const unwatch = settingsItem.watch((v) => (settings = { ...defaultSettings, ...v }));
-    ctx.onInvalidated(unwatch);
+    ctx.onInvalidated(quietly(unwatch));
+    let dwellNeeded = DWELL_MS;
+    void devModeItem.getValue().then((dev) => (dwellNeeded = dev ? DEV_DWELL_MS : DWELL_MS));
+    ctx.onInvalidated(quietly(devModeItem.watch((dev) => (dwellNeeded = dev ? DEV_DWELL_MS : DWELL_MS))));
 
-    let autoTimer: ReturnType<typeof setTimeout> | undefined;
-    let lastAuto = '';
 
     const onSelectionDone = () => {
       const text = selectedText();
       const range = text.length >= MIN_SELECTION_CHARS ? window.getSelection()?.getRangeAt(0) : undefined;
-      if (range && settings.selectionButton) ui.showBubble(range.getBoundingClientRect());
+      if (range && settings.selectionButton) ui.showBubble(range.getBoundingClientRect(), text);
       else ui.hideBubble();
 
       clearTimeout(autoTimer);
@@ -117,7 +138,7 @@ export default defineContentScript({
       lastTick = now;
 
       const url = location.href;
-      if (asking || dwellMs < DWELL_MS || now < retryAt || reported === url || !autoOn(settings) || isFeedUrl(url)) return;
+      if (asking || dwellMs < dwellNeeded || now < retryAt || reported === url || !autoOn(settings) || isFeedUrl(url)) return;
       const page = collectPage();
       if (!page.ok || page.page.text.length < MIN_READING_CHARS) {
         reported = url;

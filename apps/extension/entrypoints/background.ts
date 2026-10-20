@@ -1,5 +1,13 @@
 import { api, errorMessage } from '@/lib/api';
-import { CHECKPOINT_ALARM, checkpoint, suggest, suggestOnActiveTab, syncCheckpointAlarm, visit } from '@/lib/engine';
+import {
+  CHECKPOINT_ALARM,
+  checkpoint,
+  refreshDevMode,
+  suggest,
+  suggestOnActiveTab,
+  syncCheckpointAlarm,
+  visit,
+} from '@/lib/engine';
 import {
   isCurioMessage,
   type ContentMessage,
@@ -9,15 +17,18 @@ import {
   type VisitResult,
 } from '@/lib/messages';
 import { touchSession } from '@/lib/session';
-import { settingsItem } from '@/lib/storage';
+import { devModeItem, settingsItem } from '@/lib/storage';
 
 export default defineBackground(() => {
   browser.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
-  void syncCheckpointAlarm();
+  void refreshDevMode().then(syncCheckpointAlarm);
   settingsItem.watch(() => void syncCheckpointAlarm());
+  devModeItem.watch(() => void syncCheckpointAlarm());
   browser.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === CHECKPOINT_ALARM) void checkpoint();
+    if (alarm.name !== CHECKPOINT_ALARM) return;
+    void refreshDevMode();
+    void checkpoint();
   });
 
   browser.commands.onCommand.addListener((command) => {
@@ -39,6 +50,7 @@ export default defineBackground(() => {
 
     switch (message.type) {
       case 'curio:request-active':
+        void refreshDevMode();
         return reply(suggestOnActiveTab(message.requestedAction));
       case 'curio:selection':
         if (tabId !== undefined) void suggest(tabId, 'selection', message.page);

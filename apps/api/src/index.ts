@@ -39,7 +39,14 @@ const store = useSupabase
   ? createSupabaseStore(env.SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY!)
   : createMemoryStore();
 
-const app = createApp({ store, llm, assessor: createAssessorChain(steps), apiToken: env.API_TOKEN });
+const app = createApp({
+  store,
+  llm,
+  assessor: createAssessorChain(steps),
+  apiToken: env.API_TOKEN,
+  dev: env.CURIO_DEV,
+});
+if (env.CURIO_DEV) console.warn('[api] CURIO_DEV is on: automatic suggestions skip cooldowns and silence decisions');
 
 serve({ fetch: app.fetch, port: env.PORT, hostname: env.HOST }, () => {
   console.log(`api on http://${env.HOST}:${env.PORT}${env.API_TOKEN ? ' (token required)' : ' (local, no token)'}`);

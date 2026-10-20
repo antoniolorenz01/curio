@@ -24,6 +24,11 @@ export type PipelineDeps = {
   assessor: Assessor;
   rng?: Rng;
   now?: () => number;
+  /**
+   * Development mode (CURIO_DEV): automatic triggers always produce a suggestion when possible,
+   * skipping cooldowns and silence decisions. Those decisions are logged with a `dev:` reason.
+   */
+  dev?: boolean;
 };
 
 const FEEDBACK_WINDOW = 500;
@@ -32,7 +37,7 @@ const FEEDBACK_WINDOW = 500;
  * The deterministic part of the gate for automatic triggers, without page content.
  * Lets the extension skip reading and condensing a page when nothing could be shown anyway.
  */
-export async function autoStatus(deps: Pick<PipelineDeps, 'store' | 'now'>, session: Session): Promise<AutoStatus> {
+export async function autoStatus(deps: Pick<PipelineDeps, 'store' | 'now' | 'dev'>, session: Session): Promise<AutoStatus> {
   const now = (deps.now ?? Date.now)();
   const [profile, lastAt, autoCount] = await Promise.all([
     deps.store.getProfile(),
@@ -50,6 +55,7 @@ export async function autoStatus(deps: Pick<PipelineDeps, 'store' | 'now'>, sess
     timeSinceLastSuggestionSec: sinceLast,
     autoInterventions: autoCount,
     profile,
+    dev: deps.dev,
   });
   if (!gate.blocked) return { allowed: true, reason: null, retryInSec: null };
   const retryInSec = gate.reason === 'cooldown' ? Math.ceil(profile.cooldownSec - sinceLast) : null;
@@ -162,8 +168,11 @@ export const decide = traced(
       timeSinceLastSuggestionSec: context.timeSinceLastSuggestionSec,
       autoInterventions: autoCount,
       profile,
+      dev: deps.dev,
     });
     if (gate.blocked) return finish('none', gate.reason);
+    const dev = deps.dev === true && !manual;
+    let forced = false;
 
     // 2–3. Assessor filters, bandit picks. A requested action skips both.
     let action: Action;
@@ -180,14 +189,17 @@ export const decide = traced(
       eligible = assessment.eligibleActions;
 
       // The user asked, so "is now a good moment" doesn't apply to manual requests.
-      if (!manual && !assessment.intervene) return finish('none', `assessor_skip:${assessment.source}`);
+      if (!manual && !assessment.intervene) {
+        if (!dev) return finish('none', `assessor_skip:${assessment.source}`);
+        forced = true;
+      }
 
       const history = await historyPromise;
       const choice = chooseAction({
         eligible: assessment.eligibleActions,
         posteriors: computePosteriors(history, started),
         distractionRisk: manual ? 0 : assessment.distractionRisk,
-        includeNone: !manual,
+        includeNone: !manual && !dev,
         rng: deps.rng,
       });
       action = choice.action;
@@ -204,8 +216,11 @@ export const decide = traced(
           generateIntervention(llm, stimulus, context, profile.language, rejection),
         );
         usage[`generate_${attempt}`] = draft.usage;
-        const verdict = verifyIntervention(draft.text, draft.anchor, `${context.topic} ${context.excerptOrSummary}`);
-        if (verdict.ok) return finish(action, manual ? 'manual_request' : 'policy_selected', draft);
+        const verdict = verifyIntervention(draft.text, draft.anchor, `${context.topic} ${context.excerptOrSummary}`, stimulus);
+        if (verdict.ok) {
+          const reason = manual ? 'manual_request' : dev ? `dev:${forced ? 'forced' : 'policy_selected'}` : 'policy_selected';
+          return finish(action, reason, draft);
+        }
         rejection = verdict.reason;
       } catch (err) {
         console.warn(`[decision] generation attempt ${attempt} failed:`, (err as Error).message);
