@@ -11,7 +11,9 @@ import { autoOn, defaultSettings, devModeItem, panelCardItem, settingsItem, type
 // Runs in the background service worker: the suggestion flow lives here so it works
 // on any page without the side panel open.
 
-const inFlight = new Set<number>();
+/** Per tab, the idea being written and whether the user asked for it. */
+type Job = { manual: boolean; superseded: boolean };
+const inFlight = new Map<number, Job>();
 
 /** Asks the API whether it runs in development mode and stores the answer for every part of the extension. */
 export async function refreshDevMode() {
@@ -50,13 +52,19 @@ export async function suggest(tabId: number, trigger: Trigger, page: PageSnapsho
   const manual = trigger === 'manual';
   const settings = await getSettings();
   if (!manual && !autoOn(settings)) return;
-  if (inFlight.has(tabId)) {
-    // An automatic suggestion is being written for this tab; say so instead of doing nothing.
-    if (manual) await send(tabId, { type: 'curio:note', text: 'Still working on an idea for this page…', tone: 'muted' });
-    return;
+  const running = inFlight.get(tabId);
+  if (running) {
+    if (!manual) return;
+    if (running.manual) {
+      await send(tabId, { type: 'curio:note', text: 'Still working on an idea for this page…', tone: 'muted' });
+      return;
+    }
+    // The user asked: their request goes ahead and the automatic one is never shown.
+    running.superseded = true;
   }
 
-  inFlight.add(tabId);
+  const job: Job = { manual, superseded: false };
+  inFlight.set(tabId, job);
   if (manual) await send(tabId, { type: 'curio:loading' });
   try {
     const sessionId = await ensureSession(autoOn(settings));
@@ -77,15 +85,16 @@ export async function suggest(tabId: number, trigger: Trigger, page: PageSnapsho
       paused: false,
       requestedAction,
     });
+    if (job.superseded) return;
     if (result.intervention) {
       await send(tabId, { type: 'curio:card', card: { intervention: result.intervention, topic: context.topic, auto: !manual } });
     } else if (manual) {
       await send(tabId, { type: 'curio:note', text: noneNote(result.decision.reasonCode), tone: 'muted' });
     }
   } catch (err) {
-    if (manual) await send(tabId, { type: 'curio:note', text: errorMessage(err), tone: 'error' });
+    if (manual && !job.superseded) await send(tabId, { type: 'curio:note', text: errorMessage(err), tone: 'error' });
   } finally {
-    inFlight.delete(tabId);
+    if (inFlight.get(tabId) === job) inFlight.delete(tabId);
   }
 }
 
