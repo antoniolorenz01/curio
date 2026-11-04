@@ -79,6 +79,7 @@ In the extension, **Settings** holds your interests, which idea types to allow, 
 
 - The API runs on your machine by default (`127.0.0.1`), needs no account, and only accepts requests from the extension: requests from web pages are rejected by origin and bodies must be JSON.
 - Only a condensed summary of what you read is stored, never full page text. Sensitive sites (mail, chats, accounts, banking) are never read.
+- To write ideas, an excerpt of what you're reading is sent to OpenAI, and to Jev or LangSmith if you enable them. Nothing is sent anywhere else.
 - Page content is treated as untrusted data in every prompt; instructions embedded in pages are not followed.
 - To run the API on a server, set `HOST=0.0.0.0` and an `API_TOKEN` (e.g. `openssl rand -hex 24`), then enter the server URL and token in the extension under **Settings → Advanced**.
 
